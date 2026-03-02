@@ -1,0 +1,15 @@
+# Ignore environment secrets
+.env
+
+# Node stuff
+node_modules/
+
+# Build output
+dist/
+
+# Logs
+*.log
+
+# OS/editor junk
+.DS_Store
+*.swp
