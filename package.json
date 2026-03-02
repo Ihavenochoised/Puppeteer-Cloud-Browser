@@ -1,7 +1,7 @@
 {
-  "name": "template",
+  "name": "puppeteer-cloud-browser",
   "version": "1.0.0",
-  "description": "Template Express app.",
+  "description": "Puppeteer browser that runs in the cloud. ",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
