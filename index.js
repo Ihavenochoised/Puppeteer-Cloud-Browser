@@ -17,7 +17,7 @@ app.use("/api", express.json(), apiRouter);
 
 // 404 fallback
 app.use((req, res) => {
-    res.status(404).sendFile(path.join(__dirname, "public/pages/404/index.html"));
+    res.status(404).sendFile(path.join(__dirname, "public/404.html"));
 });
 
 const PORT = process.env.PORT || 5000;
