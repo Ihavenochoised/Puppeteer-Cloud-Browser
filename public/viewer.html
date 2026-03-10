@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browser Stream</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/stylesheets/" />
+  </head>
+  <body>
+    <header>
+      <h1>Browser Stream</h1>
+      <span>headless · live</span>
+    </header>
+
+    <div class="browser">
+      <!-- Tab bar -->
+      <div class="tab-bar" id="tab-bar">
+        <!-- tabs injected by JS -->
+        <div class="tab-new" id="btn-new-tab" title="New tab">+</div>
+      </div>
+
+      <!-- URL / nav bar -->
+      <div class="nav-bar">
+        <input
+          id="url-input"
+          class="url-input"
+          type="url"
+          placeholder="https://example.com"
+          spellcheck="false"
+        />
+        <button class="nav-btn" id="btn-go" disabled>Go</button>
+        <button class="stop-btn" id="btn-stop" disabled>Stop</button>
+      </div>
+
+      <!-- Status -->
+      <div class="status-strip">
+        <div class="dot" id="dot"></div>
+        <span class="status-text" id="status-text"
+          >disconnected — press Go to start</span
+        >
+      </div>
+
+      <!-- Stream -->
+      <div class="viewport">
+        <img id="stream" alt="stream" />
+        <div class="placeholder" id="placeholder">
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#0a0a0a"
+            stroke-width="1.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path
+              d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+            />
+          </svg>
+          <p>enter a url and press go</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">mouse · left/right click · scroll forwarded in real-time</p>
+
+    <script src="/javascripts/viewer.js"></script>
+  </body>
+</html>

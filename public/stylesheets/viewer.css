@@ -1,0 +1,340 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --fg: #0a0a0a;
+    --fg-muted: #999;
+    --border: #e4e4e4;
+    --bg: #fff;
+    --bg-subtle: #f5f5f5;
+    --accent: #0a0a0a;
+    --red: #e03030;
+    --tab-h: 36px;
+    --bar-h: 44px;
+    --radius: 6px;
+}
+
+body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 24px 64px;
+}
+
+/* ── Page header ── */
+header {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 28px;
+}
+
+header h1 {
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+}
+
+header span {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--fg-muted);
+}
+
+/* ── Browser chrome wrapper ── */
+.browser {
+    width: 100%;
+    max-width: 960px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Tab bar ── */
+.tab-bar {
+    display: flex;
+    align-items: flex-end;
+    background: var(--bg-subtle);
+    border-bottom: 1px solid var(--border);
+    padding: 0 8px;
+    gap: 2px;
+    min-height: calc(var(--tab-h) + 1px);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar {
+    display: none;
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--tab-h);
+    padding: 0 10px 0 12px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    font-size: 0.76rem;
+    font-weight: 400;
+    color: var(--fg-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 180px;
+    position: relative;
+    transition: background 0.1s, color 0.1s;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.tab:hover {
+    background: #ececec;
+    color: var(--fg);
+}
+
+.tab.active {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--fg);
+    font-weight: 500;
+    /* sit on top of the bar's bottom border */
+    margin-bottom: -1px;
+    z-index: 1;
+}
+
+.tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.tab-close {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    color: var(--fg-muted);
+    transition: background 0.1s, color 0.1s;
+}
+
+.tab-close:hover {
+    background: #ddd;
+    color: var(--fg);
+}
+
+.tab-new {
+    height: var(--tab-h);
+    width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: var(--fg-muted);
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    flex-shrink: 0;
+    transition: background 0.1s, color 0.1s;
+    margin-left: 2px;
+}
+
+.tab-new:hover {
+    background: #ececec;
+    color: var(--fg);
+}
+
+/* ── URL / nav bar ── */
+.nav-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+}
+
+.url-input {
+    flex: 1;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.76rem;
+    color: var(--fg);
+    background: var(--bg-subtle);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.url-input:focus {
+    border-color: var(--accent);
+    background: var(--bg);
+}
+
+.url-input::placeholder {
+    color: #bbb;
+}
+
+.nav-btn {
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+    transition: background 0.12s;
+    white-space: nowrap;
+}
+
+.nav-btn:hover {
+    background: #333;
+    border-color: #333;
+}
+
+.nav-btn:disabled {
+    background: #ccc;
+    border-color: #ccc;
+    cursor: not-allowed;
+}
+
+.stop-btn {
+    height: 32px;
+    padding: 0 14px;
+    border: 1px solid #f0c0c0;
+    border-radius: var(--radius);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--red);
+    transition: background 0.12s;
+    white-space: nowrap;
+}
+
+.stop-btn:hover {
+    background: #fff5f5;
+}
+
+.stop-btn:disabled {
+    color: #ccc;
+    border-color: var(--border);
+    cursor: not-allowed;
+}
+
+/* ── Status strip ── */
+.status-strip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    background: var(--bg-subtle);
+    border-bottom: 1px solid var(--border);
+}
+
+.dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ccc;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.dot.live {
+    background: #22c55e;
+    box-shadow: 0 0 0 2px #dcfce7;
+}
+
+.dot.error {
+    background: var(--red);
+}
+
+.status-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--fg-muted);
+}
+
+/* ── Viewport ── */
+.viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #f7f7f7;
+    overflow: hidden;
+}
+
+#stream {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    cursor: crosshair;
+    opacity: 0;
+    transition: opacity 0.25s;
+}
+
+#stream.visible {
+    opacity: 1;
+}
+
+.placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    transition: opacity 0.25s;
+}
+
+.placeholder.hidden {
+    opacity: 0;
+}
+
+.placeholder svg {
+    opacity: 0.15;
+}
+
+.placeholder p {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--fg-muted);
+}
+
+/* ── Footer ── */
+.hint {
+    margin-top: 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.67rem;
+    color: #ccc;
+    text-align: center;
+}
