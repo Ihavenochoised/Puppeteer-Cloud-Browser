@@ -81,13 +81,34 @@ function connect() {
         if (url) send({ type: "navigate", url });
     });
 
-    ws.addEventListener("message", (e) => {
-        // Binary = JPEG frame
+    ws.addEventListener("message", async (e) => {
+        // Binary = delta packet  [ type(1) x(2) y(2) w(2) h(2) JPEG... ]
         if (e.data instanceof ArrayBuffer) {
-            const blob = new Blob([e.data], { type: "image/jpeg" });
-            const old = streamImg.src;
-            streamImg.src = URL.createObjectURL(blob);
-            if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+            const dv = new DataView(e.data);
+            const type = dv.getUint8(0);
+            const x = dv.getUint16(1);
+            const y = dv.getUint16(3);
+            const w = dv.getUint16(5);
+            const h = dv.getUint16(7);
+            const payload = e.data.slice(9);
+
+            const blob = new Blob([payload], { type: "image/jpeg" });
+            const bmp = await createImageBitmap(blob);
+            const ctx = streamImg.getContext("2d");
+
+            if (type === 0) {
+                // Full frame — resize canvas if needed and draw
+                if (streamImg.width !== w || streamImg.height !== h) {
+                    streamImg.width = w;
+                    streamImg.height = h;
+                }
+                ctx.drawImage(bmp, 0, 0);
+            } else {
+                // Patch — composite at the given offset
+                ctx.drawImage(bmp, x, y);
+            }
+
+            bmp.close();
 
             if (!streamImg.classList.contains("visible")) {
                 streamImg.classList.add("visible");
@@ -168,11 +189,11 @@ connect();
 // ── Mouse forwarding ───────────────────────────────────────────────────────────
 function toRemote(clientX, clientY) {
     const rect = streamImg.getBoundingClientRect();
-    const nW = 1280,
-        nH = 720;
-    const scale = Math.min(rect.width / nW, rect.height / nH);
-    const offX = (rect.width - nW * scale) / 2;
-    const offY = (rect.height - nH * scale) / 2;
+    const cW = streamImg.width || 1280;
+    const cH = streamImg.height || 720;
+    const scale = Math.min(rect.width / cW, rect.height / cH);
+    const offX = (rect.width - cW * scale) / 2;
+    const offY = (rect.height - cH * scale) / 2;
     return {
         x: Math.round((clientX - rect.left - offX) / scale),
         y: Math.round((clientY - rect.top - offY) / scale),
@@ -203,11 +224,7 @@ streamImg.addEventListener(
     "wheel",
     (e) => {
         e.preventDefault();
-        send({
-            type: "scroll",
-            x: Math.round(e.deltaX),
-            y: Math.round(e.deltaY),
-        });
+        send({ type: "scroll", x: Math.round(e.deltaX), y: Math.round(e.deltaY) });
     },
     { passive: false },
 );
