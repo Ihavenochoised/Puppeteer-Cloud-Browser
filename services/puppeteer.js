@@ -18,6 +18,13 @@ async function resolveLaunchOptions() {
         return {
             executablePath: stdout.trim(),
             headless: 'new',
+            userDataDir: './userData',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+        };
+    } else if (getRuntime() === 'render') {
+        return {
+            headless: 'new',
+            userDataDir: './userData',
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         };
     }
