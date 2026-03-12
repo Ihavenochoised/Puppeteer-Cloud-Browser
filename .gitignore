@@ -140,3 +140,6 @@ vite.config.ts.timestamp-*
 
 # Downloads from Chromium
 downloads/
+
+# Chrome User Data
+userData/
