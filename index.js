@@ -28,6 +28,9 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 wireWebSocketServer(wss, { fps: 15 });
 
+// ===== USER DATABASE SETUP =====
+import { addUser, getUserCount } from './services/databaseManager.js';
+
 // ===== SERVER START =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

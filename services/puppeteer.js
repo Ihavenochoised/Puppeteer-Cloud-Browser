@@ -5,6 +5,9 @@ import sharp from 'sharp';
 import getRuntime from './getRuntime.js';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
+import * as databaseManager from './databaseManager.js'
 
 puppeteerExtra.use(StealthPlugin());
 
@@ -12,27 +15,26 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 // ─── Runtime helper ────────────────────────────────────────────────────────────
 
-async function resolveLaunchOptions() {
+async function resolveLaunchOptions(profile = 'default') {
     if (getRuntime() === 'replit') {
         const { stdout } = await promisify(exec)('which chromium');
         return {
             executablePath: stdout.trim(),
             headless: 'new',
-            userDataDir: './userData',
+            userDataDir: `./userData/${profile}`,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         };
     } else if (getRuntime() === 'render') {
         return {
             headless: 'new',
-            userDataDir: './userData',
+            userDataDir: `./userData/${profile}`,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         };
     }
     return { headless: 'new' };
 }
 
-async function launchBrowser() {
-    const opts = await resolveLaunchOptions();
+async function launchBrowser(opts) {
     // puppeteer-extra wraps launch and injects stealth patches before the
     // browser starts — must use it instead of vanilla puppeteer.launch()
     return puppeteerExtra.launch(opts);
@@ -107,9 +109,9 @@ function pushTabState(socket, session) {
 
 // ─── Session lifecycle ─────────────────────────────────────────────────────────
 
-async function createSession(socket, { fps = 10 } = {}) {
-    const launchOpts = await resolveLaunchOptions();
-    const browser    = await launchBrowser();
+async function createSession(socket, { fps = 10, profile = 'default', ephemeral = false } = {}) {
+    const launchOpts = await resolveLaunchOptions(profile);
+    const browser    = await launchBrowser(launchOpts);
     const firstTab   = await makeTab(browser);
 
     const session = {
@@ -119,6 +121,8 @@ async function createSession(socket, { fps = 10 } = {}) {
         streaming:  false,       // starts after first navigate
         intervalId: null,
         pendingFps: fps,
+        profile,
+        ephemeral,               // if true, delete userDataDir on disconnect
     };
 
     sessions.set(socket, session);
@@ -160,8 +164,16 @@ async function destroySession(socket) {
     try { await session.browser.close(); }
     catch (e) { console.error('[session] error closing browser:', e.message); }
 
+    const { profile, ephemeral } = session;
     sessions.delete(socket);
     console.log(`[session] destroyed — active sessions: ${sessions.size}`);
+
+    if (ephemeral && profile) {
+        const dir = `./userData/${profile}`;
+        rm(dir, { recursive: true, force: true })
+            .then(() => console.log(`[session] deleted ephemeral profile: ${dir}`))
+            .catch(e => console.warn(`[session] failed to delete ${dir}:`, e.message));
+    }
 }
 
 // ─── Navigation ────────────────────────────────────────────────────────────────
@@ -236,7 +248,6 @@ function switchTab(socket, tabIndex) {
     if (!session.tabs[tabIndex]) throw new Error(`No tab at index ${tabIndex}`);
 
     session.activeTab = tabIndex;
-    // Reset delta state so we don't diff the new tab against the old tab's pixels
     if (session._resetDelta) session._resetDelta();
     pushTabState(socket, session);
 }
@@ -303,76 +314,94 @@ function startStreaming(socket, fps = 10) {
 
     const intervalMs = Math.max(20, Math.round(1000 / Math.max(1, fps)));
 
-    // Delta state — stored per streaming session, reset on tab switch
-    let prevRaw   = null;   // raw RGB Buffer of last sent frame
+    let prevRaw   = null;
     let tickCount = 0;
 
-    // Reset delta state whenever the active tab changes so we don't diff
-    // across two completely different pages
-    const origSwitchTab = session._resetDelta;
-    session._resetDelta = () => { prevRaw = null; tickCount = 0; };
+    session._resetDelta = () => {
+        prevRaw   = null;
+        tickCount = 0;
+    };
 
     session.streaming  = true;
-    session.intervalId = setInterval(async () => {
-        if (!session.streaming) return;
+    session.intervalId = true;  // truthy sentinel so callers know streaming is active
 
-        try {
-            const page = activePage(session);
+    // Self-scheduling loop — awaits each tick fully before starting the next.
+    // This means there is never more than one screenshot in-flight at a time,
+    // which is the root cause of stale frames appearing after tab switches.
+    const loop = async () => {
+        while (session.streaming && sessions.has(socket)) {
+            const start      = Date.now();
+            const currentTab = session.activeTab;  // snapshot BEFORE any await
 
-            // Always capture as raw PNG so we get lossless pixels for diffing
-            const pngBuf = await page.screenshot({ type: 'png' });
+            try {
+                const page   = activePage(session);
+                const pngBuf = await page.screenshot({ type: 'png' });
 
-            // Decode to raw RGB (3 channels — alpha not needed for diffing)
-            const { data: rawBuf } = await sharp(pngBuf)
-                .resize(FRAME_W, FRAME_H)
-                .removeAlpha()
-                .raw()
-                .toBuffer({ resolveWithObject: true });
+                // Tab changed while we were screenshotting — discard and loop
+                if (session.activeTab !== currentTab) {
+                    prevRaw   = null;
+                    tickCount = 0;
+                } else {
+                    const { data: rawBuf } = await sharp(pngBuf)
+                        .resize(FRAME_W, FRAME_H)
+                        .removeAlpha()
+                        .raw()
+                        .toBuffer({ resolveWithObject: true });
 
-            tickCount++;
-            const forceFull = !prevRaw || tickCount % FULL_FRAME_EVERY === 0;
+                    // Check again after the sharp decode
+                    if (session.activeTab !== currentTab) {
+                        prevRaw   = null;
+                        tickCount = 0;
+                    } else {
+                        tickCount++;
+                        const forceFull = !prevRaw || tickCount % FULL_FRAME_EVERY === 0;
 
-            if (forceFull) {
-                // Full frame — encode as JPEG and send with type=0 header
-                const jpeg = await sharp(rawBuf, { raw: { width: FRAME_W, height: FRAME_H, channels: 3 } })
-                    .jpeg({ quality: 50 })
-                    .toBuffer();
-                const packet = Buffer.concat([buildHeader(0, 0, 0, FRAME_W, FRAME_H), jpeg]);
-                if (socket.readyState === socket.OPEN) socket.send(packet);
-            } else {
-                // Diff against previous frame
-                const bounds = diffBounds(prevRaw, rawBuf, FRAME_W, FRAME_H);
+                        if (forceFull) {
+                            const jpeg = await sharp(rawBuf, { raw: { width: FRAME_W, height: FRAME_H, channels: 3 } })
+                                .jpeg({ quality: 50 })
+                                .toBuffer();
+                            const packet = Buffer.concat([buildHeader(0, 0, 0, FRAME_W, FRAME_H), jpeg]);
+                            if (socket.readyState === socket.OPEN) socket.send(packet);
+                        } else {
+                            const bounds = diffBounds(prevRaw, rawBuf, FRAME_W, FRAME_H);
+                            if (bounds) {
+                                const patch = await sharp(rawBuf, { raw: { width: FRAME_W, height: FRAME_H, channels: 3 } })
+                                    .extract({ left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h })
+                                    .jpeg({ quality: 50 })
+                                    .toBuffer();
+                                const packet = Buffer.concat([buildHeader(1, bounds.x, bounds.y, bounds.w, bounds.h), patch]);
+                                if (socket.readyState === socket.OPEN) socket.send(packet);
+                            }
+                        }
 
-                if (bounds) {
-                    // Crop just the changed region and JPEG encode it
-                    const patch = await sharp(rawBuf, { raw: { width: FRAME_W, height: FRAME_H, channels: 3 } })
-                        .extract({ left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h })
-                        .jpeg({ quality: 50 })
-                        .toBuffer();
-                    const packet = Buffer.concat([buildHeader(1, bounds.x, bounds.y, bounds.w, bounds.h), patch]);
-                    if (socket.readyState === socket.OPEN) socket.send(packet);
+                        prevRaw = rawBuf;
+                    }
                 }
-                // If bounds is null, nothing changed — send nothing at all
+            } catch (err) {
+                const detached = err.message.includes('Not attached to an active page')
+                              || err.message.includes('Target closed')
+                              || err.message.includes('Session closed');
+                if (!detached) console.error('[stream] error:', err.message);
             }
 
-            prevRaw = rawBuf;
-
-        } catch (err) {
-            const detached = err.message.includes('Not attached to an active page')
-                          || err.message.includes('Target closed')
-                          || err.message.includes('Session closed');
-            if (!detached) console.error('[stream] error:', err.message);
-            // mid-navigation: framenavigated listener will sync tab state once settled
+            // Wait out the remainder of the interval
+            const elapsed = Date.now() - start;
+            const wait    = Math.max(0, intervalMs - elapsed);
+            if (wait > 0) await new Promise(r => setTimeout(r, wait));
         }
-    }, intervalMs);
+        session.intervalId = null;
+    };
+
+    loop();
 }
 
 function stopStreaming(socket) {
     const session = sessions.get(socket);
     if (!session || !session.intervalId) return;
-    clearInterval(session.intervalId);
-    session.intervalId = null;
+    // intervalId is now a sentinel boolean, not a real interval —
+    // setting streaming=false causes the loop to exit naturally
     session.streaming  = false;
+    session.intervalId = null;
 }
 
 // ─── WebSocket message handler ─────────────────────────────────────────────────
@@ -404,6 +433,10 @@ async function handleWebSocketMessage(socket, raw) {
 
         case 'navigate':
             await navigateTab(socket, session.activeTab, msg.url);
+            break;
+
+        case 'refresh':
+            await activePage(session).reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
             break;
 
         case 'newtab':
@@ -462,19 +495,43 @@ async function handleWebSocketMessage(socket, raw) {
 // ─── WSS wiring ────────────────────────────────────────────────────────────────
 
 function wireWebSocketServer(wss, opts = {}) {
-    wss.on('connection', async (socket) => {
-        console.log('[wss] new connection');
-        try {
-            await createSession(socket, opts);
-        } catch (err) {
-            console.error('[wss] failed to create session:', err);
-            socket.close();
-            return;
-        }
+    wss.on('connection', (socket) => {
+        console.log('[wss] new connection — waiting for connect handshake');
 
-        socket.on('message', (data) => handleWebSocketMessage(socket, data));
-        socket.on('close',   ()     => { console.log('[wss] closed'); destroySession(socket); });
-        socket.on('error',   (err)  => { console.error('[wss] error:', err.message); destroySession(socket); });
+        socket.on('close', () => { console.log('[wss] closed'); destroySession(socket); });
+        socket.on('error', (err) => { console.error('[wss] error:', err.message); destroySession(socket); });
+
+        // First message must be { type: 'connect', profile, password }
+        // Defer browser launch until we know which userDataDir the client wants.
+        socket.once('message', async (raw) => {
+            let profile = 'default';
+            let ephemeral = false;
+            try {
+                const msg = JSON.parse(raw);
+                if (msg.type === 'connect' && msg.profile && msg.password) {
+                    // Sanitise: alphanumeric, hyphens, underscores only
+                    profile = msg.profile.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
+                }
+            } catch {}
+
+            // 'default' means anonymous — give it a unique dir that gets deleted on disconnect
+            if (profile === 'default') {
+                profile   = `default-${randomUUID()}`;
+                ephemeral = true;
+            }
+
+            console.log('[wss] starting session — profile: ' + profile + (ephemeral ? ' (ephemeral)' : ''));
+
+            try {
+                await createSession(socket, { ...opts, profile, ephemeral });
+            } catch (err) {
+                console.error('[wss] failed to create session:', err);
+                socket.close();
+                return;
+            }
+
+            socket.on('message', (data) => handleWebSocketMessage(socket, data));
+        });
     });
 }
 

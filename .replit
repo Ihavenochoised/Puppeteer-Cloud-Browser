@@ -29,6 +29,15 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "Remove all downloads"
+mode = "sequential"
+author = 45006657
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -rf ~/workspace/downloads/*"
+
 [[ports]]
 localPort = 3000
 externalPort = 3000

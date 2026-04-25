@@ -17,6 +17,27 @@
       <span>headless · live</span>
     </header>
 
+    <div class="profile-bar">
+      <span class="profile-label">profile</span>
+      <input
+        id="profile-input"
+        class="profile-input"
+        type="text"
+        placeholder="default"
+        spellcheck="false"
+        maxlength="64"
+      />
+      <span class="profile-label">password</span>
+      <input
+        id="password-input"
+        class="profile-input"
+        type="password"
+        placeholder="password"
+        spellcheck="false"
+        maxlength="64"
+      />
+    </div>
+
     <div class="browser">
       <!-- Tab bar -->
       <div class="tab-bar" id="tab-bar">
@@ -32,8 +53,12 @@
           type="url"
           placeholder="https://example.com"
           spellcheck="false"
+          disabled
         />
-        <button class="nav-btn" id="btn-go" disabled>Go</button>
+        <button class="nav-btn" id="btn-refresh" disabled title="Reload page">
+          ↺
+        </button>
+        <button class="nav-btn" id="btn-go">Connect</button>
         <button class="stop-btn" id="btn-stop" disabled>Stop</button>
       </div>
 
@@ -41,7 +66,7 @@
       <div class="status-strip">
         <div class="dot" id="dot"></div>
         <span class="status-text" id="status-text"
-          >disconnected — press Go to start</span
+          >disconnected — press Connect to start</span
         >
       </div>
 
@@ -65,13 +90,21 @@
               d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
             />
           </svg>
-          <p>enter a url and press go</p>
+          <p>connect to start browsing</p>
         </div>
       </div>
     </div>
 
     <p class="hint">mouse · left/right click · scroll forwarded in real-time</p>
 
+    <input
+      id="mobile-input"
+      type="text"
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="off"
+      spellcheck="false"
+    />
     <script src="/javascripts/viewer.js"></script>
   </body>
 </html>

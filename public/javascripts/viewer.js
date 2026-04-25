@@ -3,17 +3,21 @@ let ws = null;
 let tabs = []; // [{ index, url, title }]
 let activeTab = 0;
 let connected = false;
+let waitingForFullFrame = false; // set on tab switch, cleared when full frame arrives
 
 // ── Elements ───────────────────────────────────────────────────────────────────
 const tabBar = document.getElementById("tab-bar");
 const btnNewTab = document.getElementById("btn-new-tab");
 const urlInput = document.getElementById("url-input");
 const btnGo = document.getElementById("btn-go");
+const btnRefresh = document.getElementById("btn-refresh");
 const btnStop = document.getElementById("btn-stop");
 const streamImg = document.getElementById("stream");
 const dot = document.getElementById("dot");
 const statusText = document.getElementById("status-text");
 const placeholder = document.getElementById("placeholder");
+const profileInput = document.getElementById("profile-input");
+const passwordInput = document.getElementById("password-input");
 
 // ── Status ─────────────────────────────────────────────────────────────────────
 function setStatus(state, text) {
@@ -73,10 +77,19 @@ function connect() {
         connected = true;
         setStatus("live", "connected");
         btnGo.disabled = false;
+        btnGo.textContent = "Go";
         btnStop.disabled = false;
         btnNewTab.style.pointerEvents = "";
+        profileInput.disabled = true; // lock while session is live
+        urlInput.disabled = false;
+        btnRefresh.disabled = false;
 
-        // Navigate if there's already a URL typed
+        // Tell server which profile (userDataDir) to use for this session
+        const profile = profileInput.value.trim() || "default";
+        const password = passwordInput.value;
+        send({ type: "connect", profile, password });
+
+        // Navigate immediately if URL was already typed before connecting
         const url = urlInput.value.trim();
         if (url) send({ type: "navigate", url });
     });
@@ -91,6 +104,10 @@ function connect() {
             const w = dv.getUint16(5);
             const h = dv.getUint16(7);
             const payload = e.data.slice(9);
+
+            // After a tab switch, ignore patches until a full frame arrives
+            if (type === 1 && waitingForFullFrame) return;
+            waitingForFullFrame = false;
 
             const blob = new Blob([payload], { type: "image/jpeg" });
             const bmp = await createImageBitmap(blob);
@@ -121,8 +138,14 @@ function connect() {
         try {
             const msg = JSON.parse(e.data);
             if (msg.type === "tabs") {
+                const prevActive = activeTab;
                 tabs = msg.tabs;
                 activeTab = msg.activeTab;
+                if (prevActive !== activeTab) {
+                    waitingForFullFrame = true; // ignore patches until next full frame
+                    const ctx = streamImg.getContext("2d");
+                    ctx.clearRect(0, 0, streamImg.width, streamImg.height);
+                }
                 renderTabs();
             }
         } catch {}
@@ -132,7 +155,11 @@ function connect() {
         connected = false;
         setStatus("", "disconnected");
         btnGo.disabled = false;
+        btnGo.textContent = "Connect";
         btnStop.disabled = true;
+        profileInput.disabled = false; // allow changing profile before next connect
+        urlInput.disabled = true;
+        btnRefresh.disabled = true;
         streamImg.classList.remove("visible");
         placeholder.classList.remove("hidden");
     });
@@ -146,21 +173,23 @@ function send(obj) {
 
 // ── Button handlers ────────────────────────────────────────────────────────────
 btnGo.addEventListener("click", () => {
-    const url = urlInput.value.trim();
-    if (!url) return;
-
     if (!connected) {
         setStatus("", "connecting…");
         btnGo.disabled = true;
-        connect(); // navigate is sent automatically on open
+        connect(); // URL will be sent automatically on open
     } else {
-        send({ type: "navigate", url });
+        const url = urlInput.value.trim();
+        if (url) send({ type: "navigate", url });
     }
 });
 
 btnStop.addEventListener("click", () => {
     send({ type: "pause" });
     ws?.close();
+});
+
+btnRefresh.addEventListener("click", () => {
+    send({ type: "refresh" });
 });
 
 btnNewTab.addEventListener("click", () => {
@@ -171,20 +200,16 @@ btnNewTab.addEventListener("click", () => {
 // ── URL bar: navigate on Enter ─────────────────────────────────────────────────
 urlInput.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
-    const url = urlInput.value.trim();
-    if (!url) return;
 
     if (!connected) {
         setStatus("", "connecting…");
         btnGo.disabled = true;
-        connect();
+        connect(); // URL will be sent automatically on open
     } else {
-        send({ type: "navigate", url });
+        const url = urlInput.value.trim();
+        if (url) send({ type: "navigate", url });
     }
 });
-
-// Auto-connect on load so tabs state arrives immediately
-connect();
 
 // ── Mouse forwarding ───────────────────────────────────────────────────────────
 function toRemote(clientX, clientY) {
@@ -224,7 +249,11 @@ streamImg.addEventListener(
     "wheel",
     (e) => {
         e.preventDefault();
-        send({ type: "scroll", x: Math.round(e.deltaX), y: Math.round(e.deltaY) });
+        send({
+            type: "scroll",
+            x: Math.round(e.deltaX),
+            y: Math.round(e.deltaY),
+        });
     },
     { passive: false },
 );
@@ -299,4 +328,52 @@ document.addEventListener("keyup", (e) => {
     if (e.metaKey || e.ctrlKey) return;
     const key = KEY_REMAP[e.key] ?? e.key;
     send({ type: "keyup", key });
+});
+
+// ── Mobile keyboard ────────────────────────────────────────────────────────────
+// On touch devices there's no physical keyboard — tapping the stream focuses a
+// hidden <input> which pulls up the native on-screen keyboard. Characters are
+// forwarded as they're typed and the input is kept empty so it never fills up.
+const mobileInput = document.getElementById("mobile-input");
+let composing = false;
+
+// Focus hidden input on stream tap (touchstart so it fires before click)
+streamImg.addEventListener(
+    "touchstart",
+    () => {
+        if (!connected) return;
+        mobileInput.focus();
+        mobileInput.value = "";
+    },
+    { passive: true },
+);
+
+mobileInput.addEventListener("compositionstart", () => {
+    composing = true;
+});
+mobileInput.addEventListener("compositionend", (e) => {
+    composing = false;
+    // Send the completed composed character (e.g. Chinese/Japanese)
+    if (e.data) send({ type: "type", text: e.data });
+    mobileInput.value = "";
+});
+
+mobileInput.addEventListener("input", () => {
+    if (composing) return; // wait for compositionend to fire
+
+    const val = mobileInput.value;
+    if (!val) return;
+
+    // Count backspaces — any reduction in length is a deletion
+    // (this handles swipe-to-delete and autocorrect replacements)
+    send({ type: "type", text: val });
+    mobileInput.value = "";
+});
+
+// Enter key on mobile keyboard
+mobileInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        send({ type: "keydown", key: "Enter" });
+        e.preventDefault();
+    }
 });

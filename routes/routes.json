@@ -1,4 +1,4 @@
 {
-    "/": "index.html",
+    "/": "viewer.html",
     "/viewer": "viewer.html"
 }
