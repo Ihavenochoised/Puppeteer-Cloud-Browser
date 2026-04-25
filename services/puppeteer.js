@@ -494,6 +494,27 @@ async function handleWebSocketMessage(socket, raw) {
 
 // ─── WSS wiring ────────────────────────────────────────────────────────────────
 
+// ─── Auth helpers ──────────────────────────────────────────────────────────────
+
+const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+function rejectAuth(socket, reason) {
+    console.warn('[wss] auth rejected:', reason);
+    try {
+        if (socket.readyState === socket.OPEN) {
+            socket.send(JSON.stringify({ type: 'authError', error: reason }));
+        }
+    } catch {}
+    socket.close();
+}
+
+function profileInUse(profile) {
+    for (const s of sessions.values()) {
+        if (s.profile === profile) return true;
+    }
+    return false;
+}
+
 function wireWebSocketServer(wss, opts = {}) {
     wss.on('connection', (socket) => {
         console.log('[wss] new connection — waiting for connect handshake');
@@ -501,26 +522,67 @@ function wireWebSocketServer(wss, opts = {}) {
         socket.on('close', () => { console.log('[wss] closed'); destroySession(socket); });
         socket.on('error', (err) => { console.error('[wss] error:', err.message); destroySession(socket); });
 
+        // Drop the connection if the client never sends a handshake.
+        const handshakeTimer = setTimeout(() => {
+            rejectAuth(socket, 'handshake timeout');
+        }, HANDSHAKE_TIMEOUT_MS);
+
         // First message must be { type: 'connect', profile, password }
         // Defer browser launch until we know which userDataDir the client wants.
         socket.once('message', async (raw) => {
-            let profile = 'default';
-            let ephemeral = false;
-            try {
-                const msg = JSON.parse(raw);
-                if (msg.type === 'connect' && msg.profile && msg.password) {
-                    // Sanitise: alphanumeric, hyphens, underscores only
-                    profile = msg.profile.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'default';
-                }
-            } catch {}
+            clearTimeout(handshakeTimer);
 
-            // 'default' means anonymous — give it a unique dir that gets deleted on disconnect
-            if (profile === 'default') {
-                profile   = `default-${randomUUID()}`;
-                ephemeral = true;
+            let msg;
+            try { msg = JSON.parse(raw); }
+            catch { return rejectAuth(socket, 'handshake must be JSON'); }
+
+            if (!msg || msg.type !== 'connect') {
+                return rejectAuth(socket, 'first message must be { type: "connect" }');
             }
 
-            console.log('[wss] starting session — profile: ' + profile + (ephemeral ? ' (ephemeral)' : ''));
+            // Sanitise profile: alphanumeric, hyphens, underscores only, max 64 chars
+            const rawProfile = typeof msg.profile === 'string' ? msg.profile : '';
+            const cleanProfile = rawProfile.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+
+            let profile;
+            let ephemeral = false;
+
+            if (!cleanProfile || cleanProfile === 'default') {
+                // Anonymous session — unique throwaway dir, no DB lookup, no password required.
+                profile   = `default-${randomUUID()}`;
+                ephemeral = true;
+            } else {
+                // Named profile — require password and authenticate against the DB.
+                const password = typeof msg.password === 'string' ? msg.password : '';
+                if (!password) {
+                    return rejectAuth(socket, 'password required for named profile');
+                }
+
+                try {
+                    if (databaseManager.checkUser(cleanProfile)) {
+                        // Existing user — verify password.
+                        if (!databaseManager.checkPassword(cleanProfile, password)) {
+                            return rejectAuth(socket, 'invalid credentials');
+                        }
+                    } else {
+                        // New user — register on first connect.
+                        databaseManager.addUser(cleanProfile, password);
+                    }
+                } catch (err) {
+                    return rejectAuth(socket, `auth error: ${err.message}`);
+                }
+
+                // Refuse a second concurrent session on the same userDataDir —
+                // Chromium holds an exclusive lock on it, so the second launch
+                // would either fail or corrupt the profile.
+                if (profileInUse(cleanProfile)) {
+                    return rejectAuth(socket, 'profile already in use by another session');
+                }
+
+                profile = cleanProfile;
+            }
+
+            console.log(`[wss] starting session — profile: ${profile}${ephemeral ? ' (ephemeral)' : ''}`);
 
             try {
                 await createSession(socket, { ...opts, profile, ephemeral });
