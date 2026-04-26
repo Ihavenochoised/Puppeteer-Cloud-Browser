@@ -4,6 +4,7 @@ let tabs = []; // [{ index, url, title }]
 let activeTab = 0;
 let connected = false;
 let waitingForFullFrame = false; // set on tab switch, cleared when full frame arrives
+let authRejected = false;        // set when server sends authError, suppresses generic close toast
 
 // ── Elements ───────────────────────────────────────────────────────────────────
 const tabBar = document.getElementById("tab-bar");
@@ -23,6 +24,44 @@ const passwordInput = document.getElementById("password-input");
 function setStatus(state, text) {
     dot.className = "dot " + (state ?? "");
     statusText.textContent = text;
+}
+
+// ── Toast notifications ────────────────────────────────────────────────────────
+const toastContainer = document.getElementById("toast-container");
+
+function showToast(message, type = "info", durationMs = 4500) {
+    if (!toastContainer) return;
+
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+
+    const msg = document.createElement("span");
+    msg.className = "toast-msg";
+    msg.textContent = message;
+
+    const close = document.createElement("span");
+    close.className = "toast-close";
+    close.textContent = "×";
+    close.title = "Dismiss";
+
+    toast.appendChild(msg);
+    toast.appendChild(close);
+    toastContainer.appendChild(toast);
+
+    // Animate in on next frame so the transition runs
+    requestAnimationFrame(() => toast.classList.add("show"));
+
+    let dismissed = false;
+    const dismiss = () => {
+        if (dismissed) return;
+        dismissed = true;
+        toast.classList.remove("show");
+        // Wait for fade-out to finish before removing from the DOM
+        setTimeout(() => toast.remove(), 200);
+    };
+
+    close.addEventListener("click", dismiss);
+    if (durationMs > 0) setTimeout(dismiss, durationMs);
 }
 
 // ── Tab bar rendering ──────────────────────────────────────────────────────────
@@ -75,12 +114,16 @@ function connect() {
 
     ws.addEventListener("open", () => {
         connected = true;
-        setStatus("live", "connected");
+        authRejected = false;
+        // Server still has to validate credentials before this is truly "live" —
+        // the status flips to "connected" once the first tab state arrives.
+        setStatus("", "authenticating…");
         btnGo.disabled = false;
         btnGo.textContent = "Go";
         btnStop.disabled = false;
         btnNewTab.style.pointerEvents = "";
-        profileInput.disabled = true; // lock while session is live
+        profileInput.disabled = true;  // lock while session is live
+        passwordInput.disabled = true; // lock while session is live (parity with profile)
         urlInput.disabled = false;
         btnRefresh.disabled = false;
 
@@ -137,7 +180,21 @@ function connect() {
         // JSON = control message
         try {
             const msg = JSON.parse(e.data);
+
+            if (msg.type === "authError") {
+                // Server rejected the handshake — show the reason and let the
+                // close handler reset the UI. Mark authRejected so we don't
+                // also show a generic "disconnected" toast on top.
+                authRejected = true;
+                showToast(msg.error || "authentication failed", "error", 6000);
+                return;
+            }
+
             if (msg.type === "tabs") {
+                // First tabs message after open = handshake succeeded.
+                if (statusText.textContent === "authenticating…") {
+                    setStatus("live", "connected");
+                }
                 const prevActive = activeTab;
                 tabs = msg.tabs;
                 activeTab = msg.activeTab;
@@ -153,18 +210,24 @@ function connect() {
 
     ws.addEventListener("close", () => {
         connected = false;
-        setStatus("", "disconnected");
+        setStatus(authRejected ? "error" : "", authRejected ? "auth rejected" : "disconnected");
         btnGo.disabled = false;
         btnGo.textContent = "Connect";
         btnStop.disabled = true;
         profileInput.disabled = false; // allow changing profile before next connect
+        passwordInput.disabled = false;
         urlInput.disabled = true;
         btnRefresh.disabled = true;
         streamImg.classList.remove("visible");
         placeholder.classList.remove("hidden");
     });
 
-    ws.addEventListener("error", () => setStatus("error", "connection error"));
+    ws.addEventListener("error", () => {
+        setStatus("error", "connection error");
+        // Only surface a generic error toast if we didn't already get a
+        // specific authError from the server (which is more useful).
+        if (!authRejected) showToast("connection error", "error");
+    });
 }
 
 function send(obj) {
