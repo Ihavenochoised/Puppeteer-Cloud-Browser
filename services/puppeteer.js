@@ -16,7 +16,9 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 // ─── Runtime helper ────────────────────────────────────────────────────────────
 
 async function resolveLaunchOptions(profile = 'default') {
-    if (getRuntime() === 'replit') {
+    let runtime = getRuntime();
+    console.log(`[puppeteer] detected runtime: ${runtime}`);
+    if (runtime === 'replit') {
         const { stdout } = await promisify(exec)('which chromium');
         return {
             executablePath: stdout.trim(),
@@ -24,11 +26,16 @@ async function resolveLaunchOptions(profile = 'default') {
             userDataDir: `./userData/${profile}`,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
         };
-    } else if (getRuntime() === 'render') {
+    } else if (runtime === 'render') {
         return {
             headless: 'new',
             userDataDir: `./userData/${profile}`,
             args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+        };
+    } else if (runtime === 'windows') {
+        return {
+            headless: 'new',
+            userDataDir: `./userData/${profile}`,
         };
     }
     return { headless: 'new' };
