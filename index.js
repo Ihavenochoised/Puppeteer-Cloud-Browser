@@ -6,6 +6,7 @@ import apiRouter from './routes/api.js';
 import http from 'http';
 import { WebSocketServer } from 'ws';
 import { wireWebSocketServer } from './services/puppeteer.js';
+import 'dotenv/config';
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
