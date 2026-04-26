@@ -143,3 +143,6 @@ downloads/
 
 # Chrome User Data
 userData/
+
+# User Credentials
+secrets/
