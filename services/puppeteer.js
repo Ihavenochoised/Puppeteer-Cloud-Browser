@@ -15,9 +15,9 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 // ─── Runtime helper ────────────────────────────────────────────────────────────
 
+let runtime = getRuntime();
+console.log(`[puppeteer] detected runtime: ${runtime}`);
 async function resolveLaunchOptions(profile = 'default') {
-    let runtime = getRuntime();
-    console.log(`[puppeteer] detected runtime: ${runtime}`);
     if (runtime === 'replit') {
         const { stdout } = await promisify(exec)('which chromium');
         return {
