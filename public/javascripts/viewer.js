@@ -26,6 +26,21 @@ function setStatus(state, text) {
     statusText.textContent = text;
 }
 
+// Client-side blocklist to prevent sending dangerous schemes to the server
+function isBlockedUrlClient(url) {
+    if (typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    if (!trimmed) return false;
+    const lower = trimmed.toLowerCase();
+    if (lower === 'about:blank') return false;
+    if (lower.startsWith('http:') || lower.startsWith('https:') || lower.startsWith('/') || lower.startsWith('//')) return false;
+    const blocked = ['file:', 'data:', 'javascript:', 'blob:', 'filesystem:', 'chrome:', 'chrome-extension:', 'resource:', 'intent:'];
+    for (const s of blocked) if (lower.startsWith(s)) return true;
+    // Any other scheme like foo:bar should be blocked by default
+    if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return true;
+    return false;
+}
+
 // ── Toast notifications ────────────────────────────────────────────────────────
 const toastContainer = document.getElementById("toast-container");
 
@@ -134,7 +149,13 @@ function connect() {
 
         // Navigate immediately if URL was already typed before connecting
         const url = urlInput.value.trim();
-        if (url) send({ type: "navigate", url });
+        if (url) {
+            if (isBlockedUrlClient(url)) {
+                showToast('Blocked URL scheme: navigation not allowed', 'error', 6000);
+            } else {
+                send({ type: "navigate", url });
+            }
+        }
     });
 
     ws.addEventListener("message", async (e) => {
@@ -190,6 +211,11 @@ function connect() {
                 return;
             }
 
+            if (msg.type === 'navigateError') {
+                showToast(msg.error || 'navigation blocked by server', 'error', 6000);
+                return;
+            }
+
             if (msg.type === "tabs") {
                 // First tabs message after open = handshake succeeded.
                 if (statusText.textContent === "authenticating…") {
@@ -242,7 +268,13 @@ btnGo.addEventListener("click", () => {
         connect(); // URL will be sent automatically on open
     } else {
         const url = urlInput.value.trim();
-        if (url) send({ type: "navigate", url });
+        if (url) {
+            if (isBlockedUrlClient(url)) {
+                showToast('Blocked URL scheme: navigation not allowed', 'error', 6000);
+                return;
+            }
+            send({ type: "navigate", url });
+        }
     }
 });
 
@@ -270,7 +302,13 @@ urlInput.addEventListener("keydown", (e) => {
         connect(); // URL will be sent automatically on open
     } else {
         const url = urlInput.value.trim();
-        if (url) send({ type: "navigate", url });
+        if (url) {
+            if (isBlockedUrlClient(url)) {
+                showToast('Blocked URL scheme: navigation not allowed', 'error', 6000);
+                return;
+            }
+            send({ type: "navigate", url });
+        }
     }
 });
 

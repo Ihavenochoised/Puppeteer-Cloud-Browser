@@ -65,6 +65,12 @@ function activePage(session) {
     return session.tabs[session.activeTab].page;
 }
 
+// Blocklist: prevent navigation to local file URLs
+function isBlockedUrl(url) {
+    if (typeof url !== 'string') return false;
+    return /^\s*file:/i.test(url);
+}
+
 // ─── Tab helpers ───────────────────────────────────────────────────────────────
 
 async function makeTab(browser) {
@@ -193,6 +199,14 @@ async function navigateTab(socket, tabIndex, url) {
     if (!tab) throw new Error(`No tab at index ${tabIndex}`);
 
     try {
+        if (isBlockedUrl(url)) {
+            console.warn('[navigate] blocked attempt to open file URL:', url);
+            try {
+                if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type: 'navigateError', error: 'file URLs are not allowed' }));
+            } catch {}
+            return;
+        }
+
         await tab.page.goto(url, { waitUntil: 'networkidle2', timeout: 30_000 });
         tab.url   = tab.page.url();
         tab.title = await tab.page.title() || tab.url;
@@ -220,7 +234,14 @@ async function newTab(socket, url = null) {
 
     pushTabState(socket, session);
 
-    if (url) await navigateTab(socket, session.activeTab, url);
+    if (url) {
+        if (isBlockedUrl(url)) {
+            console.warn('[newTab] blocked attempt to open file URL:', url);
+            try { if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type: 'navigateError', error: 'file URLs are not allowed' })); } catch {}
+            return;
+        }
+        await navigateTab(socket, session.activeTab, url);
+    }
 }
 
 async function closeTab(socket, tabIndex) {
