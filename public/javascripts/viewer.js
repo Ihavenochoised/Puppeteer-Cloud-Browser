@@ -124,7 +124,11 @@ function renderTabs() {
 // ── WebSocket ──────────────────────────────────────────────────────────────────
 function connect() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    // location.pathname captures the subfolder path (e.g., "/terminal/" or "/")
+    // We clean up any trailing slashes to prevent double slashes in the URL
+    const currentPath = location.pathname.endsWith('/') ? location.pathname : location.pathname + '/';
+    // Combine them: this works perfectly whether the path is "/" or "/terminal/"
+    ws = new WebSocket(`${proto}://${location.host}${currentPath}ws`);
     ws.binaryType = "arraybuffer";
 
     ws.addEventListener("open", () => {
@@ -231,7 +235,7 @@ function connect() {
                 }
                 renderTabs();
             }
-        } catch {}
+        } catch { }
     });
 
     ws.addEventListener("close", () => {
