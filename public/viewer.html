@@ -1,114 +1,80 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Browser Stream</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:wght@300;400;500&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/stylesheets/viewer.css" />
-  </head>
-  <body>
-    <header>
-      <h1>Browser Stream</h1>
-      <span>headless · live</span>
-    </header>
 
-    <div class="profile-bar">
-      <span class="profile-label">profile</span>
-      <input
-        id="profile-input"
-        class="profile-input"
-        type="text"
-        placeholder="default"
-        spellcheck="false"
-        maxlength="64"
-      />
-      <span class="profile-label">password</span>
-      <input
-        id="password-input"
-        class="profile-input"
-        type="password"
-        placeholder="password"
-        spellcheck="false"
-        maxlength="64"
-      />
-    </div>
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Browser Stream</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link
+		href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500&family=DM+Sans:wght@300;400;500&display=swap"
+		rel="stylesheet" />
+	<link rel="stylesheet" href="/stylesheets/viewer.css" />
+</head>
 
-    <div class="browser">
-      <!-- Tab bar -->
-      <div class="tab-bar" id="tab-bar">
-        <!-- tabs injected by JS -->
-        <div class="tab-new" id="btn-new-tab" title="New tab">+</div>
-      </div>
+<body>
+	<header>
+		<h1>Browser Stream</h1>
+		<span>headless · live</span>
+	</header>
 
-      <!-- URL / nav bar -->
-      <div class="nav-bar">
-        <input
-          id="url-input"
-          class="url-input"
-          type="url"
-          placeholder="https://example.com"
-          spellcheck="false"
-          disabled
-        />
-        <button class="nav-btn" id="btn-refresh" disabled title="Reload page">
-          ↺
-        </button>
-        <button class="nav-btn" id="btn-go">Connect</button>
-        <button class="stop-btn" id="btn-stop" disabled>Stop</button>
-      </div>
+	<div class="profile-bar">
+		<span class="profile-label">profile</span>
+		<input id="profile-input" class="profile-input" type="text" placeholder="default" spellcheck="false"
+			maxlength="64" />
+		<span class="profile-label">password</span>
+		<input id="password-input" class="profile-input" type="password" placeholder="password" spellcheck="false"
+			maxlength="64" />
+	</div>
 
-      <!-- Status -->
-      <div class="status-strip">
-        <div class="dot" id="dot"></div>
-        <span class="status-text" id="status-text"
-          >disconnected — press Connect to start</span
-        >
-      </div>
+	<div class="browser">
+		<!-- Tab bar -->
+		<div class="tab-bar" id="tab-bar">
+			<!-- tabs injected by JS -->
+			<div class="tab-new" id="btn-new-tab" title="New tab">+</div>
+		</div>
 
-      <!-- Stream -->
-      <div class="viewport">
-        <canvas id="stream"></canvas>
-        <div class="placeholder" id="placeholder">
-          <svg
-            width="44"
-            height="44"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#0a0a0a"
-            stroke-width="1.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="2" y1="12" x2="22" y2="12" />
-            <path
-              d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-            />
-          </svg>
-          <p>connect to start browsing</p>
-        </div>
-      </div>
-    </div>
+		<!-- URL / nav bar -->
+		<div class="nav-bar">
+			<input id="url-input" class="url-input" type="url" placeholder="https://example.com" spellcheck="false"
+				disabled />
+			<button class="nav-btn" id="btn-refresh" disabled title="Reload page">
+				↺
+			</button>
+			<button class="nav-btn" id="btn-go">Connect</button>
+			<button class="stop-btn" id="btn-stop" disabled>Stop</button>
+		</div>
 
-    <p class="hint">mouse · left/right click · scroll forwarded in real-time</p>
+		<!-- Status -->
+		<div class="status-strip">
+			<div class="dot" id="dot"></div>
+			<span class="status-text" id="status-text">disconnected — press Connect to start</span>
+		</div>
 
-    <input
-      id="mobile-input"
-      type="text"
-      autocomplete="off"
-      autocorrect="off"
-      autocapitalize="off"
-      spellcheck="false"
-    />
+		<!-- Stream -->
+		<div class="viewport">
+			<canvas id="stream"></canvas>
+			<div class="placeholder" id="placeholder">
+				<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" stroke-width="1.2"
+					stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="12" cy="12" r="10" />
+					<line x1="2" y1="12" x2="22" y2="12" />
+					<path
+						d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+				</svg>
+				<p>connect to start browsing</p>
+			</div>
+		</div>
+	</div>
 
-    <!-- Toast container (top-right) for transient notifications -->
-    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+	<p class="hint">mouse · left/right click · scroll forwarded in real-time</p>
 
-    <script src="/javascripts/viewer.js"></script>
-  </body>
+	<input id="mobile-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+
+	<!-- Toast container (top-right) for transient notifications -->
+	<div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+	<script src="/javascripts/viewer.js"></script>
+</body>
+
 </html>
